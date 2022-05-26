@@ -15,7 +15,7 @@ quotedf = function(df) {
 
 getpricexts = function(sym, from=NULL) {
   q = qfindHistorySince(sym, from=from)
-  price_history = getmem(mem, disk, "Price", q)
+  price_history = get(disk, "Price", q)
   history_xts = xts(
     price_history[,c("open", "high", "low", "close", "volume")],
     as.Date(price_history[["date"]]))
@@ -24,12 +24,12 @@ getpricexts = function(sym, from=NULL) {
 
 getindicatorforsig = function(symbol, name) {
   qmaxdate = qselectwhere("date", symbol=symbol, name=name)
-  maxdate = getmem(mem, disk, "Sig", qmaxdate)
+  maxdate = get(disk, "Sig", qmaxdate)
   have = dim(maxdate)[1]!=0
   if(have) maxdate = max(as.Date(maxdate[["date"]]))
   q = qselectwhere("*", symbol=symbol, name=name)
   if(have) q = qaddsincedate(q, maxdate)
-  indicator = getmem(mem, disk, "Indicator", q)
+  indicator = get(disk, "Indicator", q)
   return(indicator)
 }
 
@@ -45,7 +45,7 @@ update_and_get_sigdf = function(xtssig, name, strategy, symbol) {
   df["strategy"] = strategy
   df["symbol"] = symbol
   q = qinsertdf(df, "Sig")
-  setmem(mem, disk, "Sig", q)
+  set(disk, "Sig", q)
   return(df)
 }
 

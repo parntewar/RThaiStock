@@ -13,9 +13,9 @@ update = function(symbols) {
   run(symbols)
   q = qselectwhere("*")
   q = qaddsincedate(q, date)
-  trade = getmem(mem, disk, "Trade", q)
+  trade = get(disk, "Trade", q)
   q = qselectwhere("*")
-  favor = getmem(mem, disk, "Favor", q)
+  favor = get(disk, "Favor", q)
 }
 
 ui = fluidPage(

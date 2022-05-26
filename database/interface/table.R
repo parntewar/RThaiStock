@@ -77,9 +77,25 @@ create_table = function(conndb) {
   if(!dbExistsTable(conndb, "HistoryOrder")) dbCreateTable(
     conndb, "HistoryOrder", c("symbol"="TEXT",
                               "date"="TEXT",
-                              "open"="REAL",
-                              "close"="REAL",
-                              "strategy"="TEXT",
-                              "pool"="INTEGER")
+                              "units"="REAL",
+                              "price"="REAL",
+                              "value"="REAL")
+  )
+  
+  if(!dbExistsTable(conndb, "UnitOrder")) dbCreateTable(
+    conndb, "UnitOrder", c("date"="TEXT")
+  )
+  
+  if(!dbExistsTable(conndb, "Portfolio")) dbCreateTable(
+    conndb, "Portfolio", c("symbol"="TEXT",
+                           "units"="REAL",
+                           "value"="REAL")
+  )
+  
+  if(!dbExistsTable(conndb, "Status")) dbCreateTable(
+    conndb, "Status", c("date"="TEXT",
+                        "money"="TEXT",
+                        "update"="TEXT",
+                        "favor"="TEXT")
   )
 }

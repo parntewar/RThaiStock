@@ -17,7 +17,7 @@ update_statistic = function(symbols) {
       next}
     q = sprintf("select 1 from Statistics where symbol = %s;",
                 shQuote(symbol))
-    Ex = querydb(q)
+    Ex = querydb(disk, q)
     if(dim(Ex)[1]==0) appenddb("Statistics", response)
     else {
       v = sprintf("when name = %s then %s", 
@@ -50,7 +50,7 @@ update_price = function(symbols) {
   error_report = ""
   for(symbol in symbols) {
     q = qselectwhere("*", symbol=symbol)
-    price = getmem(mem, disk, "Price", q)
+    price = get(disk, "Price", q)
     have = dim(price)[1]!=0
     if(have) from = max(as.Date(price$date))
     else from = as.Date("2010-01-01")
@@ -61,10 +61,10 @@ update_price = function(symbols) {
     t = tryCatch({
       if(have) {
         q = qdeletewhere(date=as.character(from), symbol=symbol)
-        setmem(mem, disk, "Price", q)
+        set(disk, "Price", q)
       }
       q = qinsertdf(A, "Price")
-      setmem(mem, disk, "Price", q)
+      set(disk, "Price", q)
     }, error=function(e) return("error"))
     tryCatch(progress$inc(inc), error=function(e) "error")
     if(class(t)==class("error")) {
@@ -83,15 +83,15 @@ update_price = function(symbols) {
 update_favor = function(symbol) {
   for(sym in symbol) {
     q = qselectwhere("*", symbol=sym)
-    favor = getmem(mem, disk, "Favor", q)
+    favor = get(disk, "Favor", q)
     have = dim(favor)[1]!=0
     if(have) {
       q = qselectwhere("date", symbol=sym)
-      price_date = getmem(mem, disk, "Price", q)
+      price_date = get(disk, "Price", q)
       price_max_date = as.character(max(as.Date(price_date[["date"]])))
       if(favor[["date"]] == price_max_date) next
       q = qdeletewhere(symbol=sym)
-      setmem(mem, disk, "Favor", q)
+      set(disk, "Favor", q)
     }
     sym_xts = getpricexts(sym)
     to = floor_date(Sys.Date(), "quarter")
@@ -100,7 +100,7 @@ update_favor = function(symbol) {
     sym_xts = sym_xts[paste0(from, "/", to)]
     ap_db = genfavorTable(Cl(sym_xts), sym, to)
     q = qinsertdf(ap_db)
-    setmem(mem, disk, "Favor", q)
+    set(disk, "Favor", q)
   }
   return("Ok")
 }
@@ -113,7 +113,7 @@ update_indicator = function(symbols, indi, ...) {
   indi_fullname = paste0(indi_name, "(", indi_args, ")")
   for (sym in symbols) {
     q = qselectwhere("*", symbol=sym, name=indi_fullname)
-    indicator = getmem(mem, disk, "Indicator", q)
+    indicator = get(disk, "Indicator", q)
     have = dim(indicator)[1] != 0
     from_date = NULL
     if (have) {
@@ -127,7 +127,7 @@ update_indicator = function(symbols, indi, ...) {
       )
       last_date = querydb(disk, q)[[1,1]]
       q = qdeletewhere(symbol=sym, name=indi_fullname, date=last_date)
-      setmem(mem, disk, "Indicator", q)
+      set(disk, "Indicator", q)
     }
     sym_xts = getpricexts(sym, from_date)
     sym_xts = Cl(sym_xts)
@@ -141,7 +141,7 @@ update_indicator = function(symbols, indi, ...) {
     row.names(indi_df) = NULL
     if (have) indi_df = indi_df[which(!is.na(indi_df$value)),]
     q = qinsertdf(indi_df, "Indicator")
-    setmem(mem, disk, "Indicator", q)
+    set(disk, "Indicator", q)
   }
   return(indi_fullname)
 }
