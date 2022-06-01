@@ -9,6 +9,16 @@ create_table = function(conndb) {
                        "volume"="REAL",
                        "adjusted"="REAL"))
   
+  if(!dbExistsTable(conndb, "PriceSiam")) dbCreateTable(
+    conndb, "PriceSiam", c("symbol"="TEXT",
+                           "date"="TEXT",
+                           "open"="REAL",
+                           "high"="REAL",
+                           "low"="REAL",
+                           "close"="REAL",
+                           "volume"="REAl")
+  )
+  
   if(!dbExistsTable(conndb, "Statistic")) dbCreateTable(
     conndb, "Statistic", c("symbol"="TEXT",
                            "name"="TEXT",
@@ -55,14 +65,15 @@ create_table = function(conndb) {
     conndb, "Sig", c("date"="TEXT",
                      "symbol"="TEXT",
                      "name"="TEXT",
-                     "value"="TEXT",
+                     "value"="REAL",
                      "strategy"="TEXT")
   )
   
   if(!dbExistsTable(conndb, "Trade")) dbCreateTable(
     conndb, "Trade", c("date"="TEXT",
                        "symbol"="TEXT",
-                       "value"="INTEGER",
+                       "name"="TEXT",
+                       "value"="REAL",
                        "strategy"="TEXT")
   )
   
@@ -95,7 +106,8 @@ create_table = function(conndb) {
   if(!dbExistsTable(conndb, "Status")) dbCreateTable(
     conndb, "Status", c("date"="TEXT",
                         "money"="TEXT",
-                        "update"="TEXT",
-                        "favor"="TEXT")
+                        "open"="INTEGER",
+                        "priceupdate"="TEXT",
+                        "favorupdate"="TEXT")
   )
 }

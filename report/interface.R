@@ -22,7 +22,8 @@ ui = fluidPage(
   actionButton("update", "Update Data"),
   selectInput("symbolinput", "Symbol Input", symbols),
   plotOutput("chartseries"),
-  tableOutput("pricetable")
+  tableOutput("pricetable"),
+  tableOutput("tradetable")
 )
 
 server = function(input, output) {
@@ -31,11 +32,15 @@ server = function(input, output) {
     chartSeries(tail(getpricexts(input$symbolinput), 100))
   })
   output$pricetable = renderTable({
-    table = tail(getpricexts(input$symbolinput), 20)
+    table = tail(getpricexts(input$symbolinput), 10)
     date = as.Date(index(table))
     table = data.frame(table)
     table$date = as.character(date)
     table = table[c("date", "open", "high", "low", "close", "volume")]
+  })
+  output$tradetable = renderTable({
+    q = qselectwhere("*", symbol=input$symbolinput)
+    table = tail(get(disk, "Trade", q), 10)
   })
 }
 

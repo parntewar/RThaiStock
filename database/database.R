@@ -57,7 +57,7 @@ update_price = function(symbols) {
     to = Sys.Date() + days()
     A = downloadPrice(symbol, from, to)
     A = A[complete.cases(A), ]
-    Sys.sleep(10)
+    Sys.sleep(3)
     t = tryCatch({
       if(have) {
         q = qdeletewhere(date=as.character(from), symbol=symbol)
@@ -86,10 +86,9 @@ update_favor = function(symbol) {
     favor = get(disk, "Favor", q)
     have = dim(favor)[1]!=0
     if(have) {
-      q = qselectwhere("date", symbol=sym)
+      q = qselectwhere("max(date)", symbol=sym)
       price_date = get(disk, "Price", q)
-      price_max_date = as.character(max(as.Date(price_date[["date"]])))
-      if(favor[["date"]] == price_max_date) next
+      if(favor[["date"]][1] == price_date[1,1]) next
       q = qdeletewhere(symbol=sym)
       set(disk, "Favor", q)
     }
@@ -118,19 +117,15 @@ update_indicator = function(symbols, indi, ...) {
     from_date = NULL
     if (have) {
       q = sprintf(
-        "select min(a.date) from (select date from Indicator where symbol = %s and name = %s order by date desc limit %i) as a", 
+        "select min(a.date), max(a.date) from (select date from Indicator where symbol = %s and name = %s order by date desc limit %i) as a", 
         shQuote(sym), shQuote(indi_fullname), d$n)
-      from_date = querydb(disk, q)
-      q = sprintf(
-        "select max(date) from Indicator where symbol = %s and name = %s",
-        shQuote(sym), shQuote(indi_fullname)
-      )
-      last_date = querydb(disk, q)[[1,1]]
+      date = querydb(disk, q)
+      from_date = date[, 1]
+      last_date = date[, 2]
       q = qdeletewhere(symbol=sym, name=indi_fullname, date=last_date)
       set(disk, "Indicator", q)
     }
-    sym_xts = getpricexts(sym, from_date)
-    sym_xts = Cl(sym_xts)
+    sym_xts = Cl(getpricexts(sym, from_date))
     sym_xts = sym_xts[!is.na(sym_xts)]
     indi_xts = indi(sym_xts, ...)
     indi_df = data.frame(indi_xts)

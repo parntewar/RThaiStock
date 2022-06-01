@@ -16,17 +16,52 @@ run = function(symbols) {
     progress$set(0, "updating Trade")
   }, error=function(e) "error")
   for(symbol in symbols) {
-    ema10 = getxtsindicator(symbol, nema10)
-    ema21 = getxtsindicator(symbol, nema21)
-    sig = Lag(ifelse(ema10[, "value"] > ema21[, "value"], 1, 0))
-    df = update_and_get_sigdf(sig, "Enter", strategy_name, symbol)
-    df = df[c("date", "symbol", "value", "strategy")]
-    df["value"] = gentraderle(df[["value"]])
-    q = qinsertdf(df, "Trade")
-    set(disk, "Trade", q)
+    sigmaxdate = getsigmaxdate(symbol, strategy_name)[1,1]
+    have = !is.na(sigmaxdate)
+    if(!have) sigmaxdate = NULL
+    ema10 = getxtsindicator(symbol, nema10, sigmaxdate)
+    ema21 = getxtsindicator(symbol, nema21, sigmaxdate)
+    sig = ifelse(ema10[, "value"] > ema21[, "value"], 1, 0)
+    df = update_and_get_sigdf(sig, "Enter", strategy_name, symbol, sigmaxdate)
+    update_trade(symbol, strategy_name)
     tryCatch(progress$inc(inc), error=function(e) "error")
   }
   tryCatch(progress$close(), error=function(e) "error")
   print("OK done")
 }
 
+update_trade = function(symbol, strategy) {
+  qmaxdate = qselectwhere("max(date)", symbol=symbol, strategy=strategy)
+  maxdate = get(disk, "Trade", qmaxdate)[1,1]
+  have = !is.na(maxdate)
+  buffer_trade = NULL
+  if(have) {
+    qdelete = qdeletewhere(date=maxdate, symbol=symbol, strategy=strategy)
+    set(disk, "Trade", qdelete)
+    maxdate2 = get(disk, "Trade", qmaxdate)[1,1]
+    qbuffer = qselectwhere("*", symbol=symbol, strategy=strategy, date=maxdate2)
+    buffer_trade = get(disk, "Trade", qbuffer)
+  }
+  qsig = qselectwhere("value, date", name="Enter", symbol=symbol, strategy=strategy)
+  if(have) qsig = qaddsincedate(qsig, maxdate)
+  sig = get(disk, "Sig", qsig)
+  sig_value = sig[["value"]]
+  sig_date = sig[["date"]]
+  qclose = qselectwhere("close", symbol=symbol)
+  if(have) qclose = qaddsincedate(qclose, maxdate)
+  close = get(disk, "Price", qclose)[[1]]
+  # close=close, rle=rle, type=sig_value, start=1st value
+  rle_value = gen_rle(sig_value, buffer_trade)
+  start_value = gen_start(close, sig_value, buffer_trade)
+  df = data.frame(date=sig_date, symbol=symbol, strategy=strategy, close=close, 
+                  rle=rle_value, type=sig_value, start=start_value)
+  df = pivot_longer(df, c("close", "rle", "type", "start"))
+  df = as.data.frame(df)
+  q = qinsertdf(df, "Trade")
+  set(disk, "Trade", q)
+  return(df)
+}
+
+report = function() {
+  
+}

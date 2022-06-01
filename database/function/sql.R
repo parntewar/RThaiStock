@@ -24,7 +24,8 @@ qdeletewhere = function(...) {
 
 qfindHistorySince = function(symbol, from=NULL) {
   s = sprintf(qselectwhere("*", symbol=symbol), "Price")
-  if (!is.null(from)) s = paste0(s, sprintf(" and date => %s", shQuote(from)))
+  s = gsub(";", "", s)
+  if (!is.null(from)) s = paste0(s, sprintf(" and date >= %s", shQuote(from)))
   q = paste0(s, ";")
   return(q)
 }
