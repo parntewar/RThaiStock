@@ -96,6 +96,7 @@ genfavorTable = function(price, sym, to) {
                       "sharpe", "return", "deviation", "maxDrawdown")
   rownames(ap_db) = NULL
   ap_db = pivot_longer(ap_db, colnames(ap_db)[4:length(colnames(ap_db))])
+  ap_db = as.data.frame(ap_db)
   return(ap_db)
 }
 
@@ -185,7 +186,7 @@ readlistcomp = function(file="https://classic.set.or.th/dat/eod/listedcompany/st
 }
 
 downloadset100 = function() {
-  url = "https://marketdata.set.or.th/mkt/sectorquotation.do?sector=SET100&language=th&country=TH"
+  url = "https://classic.set.or.th/mkt/sectorquotation.do?sector=SET100&language=th&country=TH"
   html = read_html(url)
   node = html_elements(html, "table")[[3]]
   table = html_table(node)

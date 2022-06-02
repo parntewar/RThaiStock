@@ -6,10 +6,16 @@ library(rvest)
 library(lubridate)
 library(PerformanceAnalytics)
 library(shiny)
+library(foreach)
+library(doParallel)
+
+core = detectCores()
+cl = makeCluster(core[1] - 1)
+registerDoParallel(cl)
 
 update_statistic = function(symbols) {
   error_report = ""
-  for(symbol in symbols) {
+  foreach(symbol=symbols) %do% {
     response = tryCatch(symbol_stats(symbol), error=function(e) "error")
     Sys.sleep(10)
     if(class(response)[1]==class("error")) {
@@ -48,7 +54,7 @@ update_price = function(symbols) {
     progress$set(0, "updating Price")
   }, error=function(e) "error")
   error_report = ""
-  for(symbol in symbols) {
+  for (symbol in symbols) {
     q = qselectwhere("*", symbol=symbol)
     price = get(disk, "Price", q)
     have = dim(price)[1]!=0
@@ -81,7 +87,13 @@ update_price = function(symbols) {
 }
 
 update_favor = function(symbol) {
-  for(sym in symbol) {
+  inc = 1 / length(symbol)
+  tryCatch({
+    progress = Progress$new()
+    progress$set(0, "updating Favor")
+  }, error=function(e) "error")
+  foreach(sym = symbol) %do% {
+    tryCatch(progress$inc(inc), error=function(e) "error")
     q = qselectwhere("*", symbol=sym)
     favor = get(disk, "Favor", q)
     have = dim(favor)[1]!=0
@@ -97,10 +109,12 @@ update_favor = function(symbol) {
     from = as.character(to - years(1))
     to = as.character(as.Date(to) - days(1))
     sym_xts = sym_xts[paste0(from, "/", to)]
+    if(dim(sym_xts)[1]<30) next
     ap_db = genfavorTable(Cl(sym_xts), sym, to)
     q = qinsertdf(ap_db)
     set(disk, "Favor", q)
   }
+  tryCatch(progress$close(), error=function(e) "error")
   return("Ok")
 }
 
@@ -110,7 +124,12 @@ update_indicator = function(symbols, indi, ...) {
   indi_args = paste0(names(d), "=", unname(unlist(d)))
   indi_args = paste(indi_args, collapse = ", ")
   indi_fullname = paste0(indi_name, "(", indi_args, ")")
-  for (sym in symbols) {
+  inc = 1 / length(symbols)
+  tryCatch({
+    progress = Progress$new()
+    progress$set(0, sprintf("updating %s", indi_fullname))
+  }, error=function(e) "error")
+  foreach (sym = symbols) %do% {
     q = qselectwhere("*", symbol=sym, name=indi_fullname)
     indicator = get(disk, "Indicator", q)
     have = dim(indicator)[1] != 0
@@ -137,7 +156,9 @@ update_indicator = function(symbols, indi, ...) {
     if (have) indi_df = indi_df[which(!is.na(indi_df$value)),]
     q = qinsertdf(indi_df, "Indicator")
     set(disk, "Indicator", q)
+    tryCatch(progress$inc(inc), error=function(e) "error")
   }
+  tryCatch(progress$close(), error=function(e) "error")
   return(indi_fullname)
 }
 

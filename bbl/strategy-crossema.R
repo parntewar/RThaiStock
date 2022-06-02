@@ -6,6 +6,9 @@ run = function(symbols) {
   inc = 1 / length(symbols)
   strategy_name = "emacross"
   r = update_price(symbols)
+  qs = "select symbol, count(date) from Price group by symbol"
+  symbols = querydb(disk, qs)
+  symbols = symbols[symbols$`count(date)` >= 30,]$symbol
   if(r!="Ok") print("Update Failed")
   r = update_favor(symbols)
   if(r!="Ok") print("Get Favor Failed")
@@ -15,7 +18,7 @@ run = function(symbols) {
     progress = Progress$new()
     progress$set(0, "updating Trade")
   }, error=function(e) "error")
-  for(symbol in symbols) {
+  foreach(symbol = symbols) %do% {
     sigmaxdate = getsigmaxdate(symbol, strategy_name)[1,1]
     have = !is.na(sigmaxdate)
     if(!have) sigmaxdate = NULL
@@ -62,6 +65,41 @@ update_trade = function(symbol, strategy) {
   return(df)
 }
 
-report = function() {
-  
+trade_report = function(date) {
+  qtrade = sprintf("select * from Trade where date = %s",
+                   shQuote(date))
+  trade = querydb(disk, qtrade)
+  trade = pivot_wider(trade)
+  trade = as.data.frame(trade)
+  qfavor = sprintf("select * from Favor")
+  favor = querydb(disk, qfavor)
+  favor = favor[favor$name=="sharpe",][c("symbol", "value")]
+  colnames(favor) = c("symbol", "favor")
+  report = merge(trade, favor, by="symbol")
+  return(report)
+}
+
+report_buy = function(date, value) {
+  if(value <= 0) value = Inf
+  report = trade_report(date)
+  history = querydb(disk, "select symbol from HistoryOrder")[[1]]
+  report = report[!(report$symbol %in% history), ]
+  report = report[report$type==1, ]
+  filter = ifelse(report$rle==1 | report$close < report$start, TRUE, FALSE)
+  report = report[filter, ]
+  report = report[order(report$favor, decreasing = TRUE), ]
+  report$value = report$close * 100
+  report$comm = report$value * 0.0018
+  report$sum_value = report$value + report$comm
+  report = report[report$value < value, ]
+  cash = 100
+  return(report)
+}
+
+report_sell = function(date) {
+  report = trade_report(date)
+  history = querydb(disk, "select symbol from HistoryOrder")[[1]]
+  report = report[report$symbol %in% history, ]
+  report = report[order(report$rle, decreasing = TRUE), ]
+  return(report)
 }
