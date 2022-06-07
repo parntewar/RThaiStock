@@ -173,6 +173,13 @@ indicator_name = function(indi, ...) {
   return(indi_fullname)
 }
 
+date_report = function() {
+  qdate = sprintf("select distinct date from Trade")
+  date = querydb(disk, qdate)
+  date = tail(date, 10)
+  date = sort(date[[1]], decreasing = TRUE)
+  return(date)
+}
 
 readlistcomp = function(file="https://classic.set.or.th/dat/eod/listedcompany/static/listedCompanies_th_TH.xls") {
   url = file

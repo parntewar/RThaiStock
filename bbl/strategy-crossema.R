@@ -79,27 +79,30 @@ trade_report = function(date) {
   return(report)
 }
 
-report_buy = function(date, value) {
+report_buy = function(date, value=NULL, cash=NULL, favor=NULL) {
   if(value <= 0) value = Inf
+  if(is.null(value)) value = Inf
   report = trade_report(date)
-  history = querydb(disk, "select symbol from HistoryOrder")[[1]]
+  history = querydb(disk, "select symbol from Portfolio")[[1]]
   report = report[!(report$symbol %in% history), ]
   report = report[report$type==1, ]
   filter = ifelse(report$rle==1 | report$close < report$start, TRUE, FALSE)
   report = report[filter, ]
+  if(is.numeric(favor)) report = report[report$favor > favor, ]
   report = report[order(report$favor, decreasing = TRUE), ]
   report$value = report$close * 100
   report$comm = report$value * 0.0018
   report$sum_value = report$value + report$comm
   report = report[report$value < value, ]
-  cash = 100
+  if(!is.null(cash)) report = report[cumsum(report$sum_value) < cash, ]
   return(report)
 }
 
 report_sell = function(date) {
   report = trade_report(date)
-  history = querydb(disk, "select symbol from HistoryOrder")[[1]]
+  history = querydb(disk, "select symbol from Portfolio")[[1]]
   report = report[report$symbol %in% history, ]
+  report = report[report$type==0, ]
   report = report[order(report$rle, decreasing = TRUE), ]
   return(report)
 }
