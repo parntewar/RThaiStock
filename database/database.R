@@ -100,7 +100,7 @@ update_favor = function(symbol) {
     if(have) {
       q = qselectwhere("max(date)", symbol=sym)
       price_date = get(disk, "Price", q)
-      if(favor[["date"]][1] == price_date[1,1]) next
+      if(favor[["date"]][1] == floor_date(as.Date(price_date[1,1]), "quarter")) return()
       q = qdeletewhere(symbol=sym)
       set(disk, "Favor", q)
     }
@@ -109,7 +109,7 @@ update_favor = function(symbol) {
     from = as.character(to - years(1))
     to = as.character(as.Date(to) - days(1))
     sym_xts = sym_xts[paste0(from, "/", to)]
-    if(dim(sym_xts)[1]<30) next
+    if(dim(sym_xts)[1]<30) return()
     ap_db = genfavorTable(Cl(sym_xts), sym, to)
     q = qinsertdf(ap_db)
     set(disk, "Favor", q)

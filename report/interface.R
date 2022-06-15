@@ -59,7 +59,7 @@ order_update = function(date=NULL) {
   }
   if(dim(port_sell)[1]!=0) {
     sym_sell = paste0(shQuote(port_sell$symbol), collapse = ", ")
-    qdelete_port_sell = sprintf("delete from Portfolio where symbol in (%)", sym_sell)
+    qdelete_port_sell = sprintf("delete from Portfolio where symbol in (%s)", sym_sell)
     senddb(disk, qdelete_port_sell)
   }
   #Cash
@@ -74,7 +74,7 @@ ui = fluidPage(
   navbarPage("Let's Go!!", 
              tabPanel("Trade Report",
                       fluidRow(column(2,
-                                      selectInput("dateinput", "Date", date_report()),
+                                      selectInput("dateinput", "Date", Sys.Date()),
                                       numericInput("valueinput", "Value", 5000),
                                       numericInput("favorinput", "favor", 0.5),
                                       actionButton("multiorder_xls", "Download Orders"),
@@ -118,44 +118,42 @@ ui = fluidPage(
              )
   )
 
-server = function(input, output) {
-  #output$date_report = date_report()
-  observeEvent(input$update, run(tradesymbols()))
-  output$chartseries = renderPlot({
-    chartSeries(tail(getpricexts(input$symbolinput), 100), name=input$symbolinput)
-  })
-  output$pricetable = renderTable({
-    table = tail(getpricexts(input$symbolinput), 10)
-    date = as.Date(index(table))
-    table = data.frame(table)
-    table$date = as.character(date)
-    table = table[c("date", "open", "high", "low", "close", "volume")]
-  })
-  # From Trade database
-  output$tradetable = renderTable({
-    q = qselectwhere("*", symbol=input$symbolinput)
-    table = tail(get(disk, "Trade", q), 10)
-  })
+server = function(input, output, session) {
+  observeEvent(NULL, {
+    updateSelectInput(session, "dateinput", "Date", date_report())
+  }, ignoreNULL = FALSE, once = TRUE)
+  observeEvent(input$update, {
+    run(tradesymbols())
+    updateSelectInput(session, "dateinput", "Date", date_report())})
+  #Data
+  reactive_cash = function() {
+    dbReadTable(disk, "Cash")}
+  reactive_portfolio = function() {
+    report = trade_report(date_report()[1])
+    history = querydb(disk, "select symbol from Portfolio")[[1]]
+    report = report[report$symbol %in% history, ]
+    report}
+  df_cash = reactiveVal(reactive_cash())
+  df_portfolio = reactiveVal(reactive_portfolio())
+  #Trade Report
   output$reportbuy = renderTable({
-    report_buy(input$dateinput, input$valueinput, cash_balance(), input$favorinput)
+    sum_cash = df_cash()
+    sum_cash = sum(sum_cash$value)
+    report_buy(input$dateinput, input$valueinput, sum_cash, 
+               input$favorinput, df_portfolio())
   })
-  output$cashbalance = renderTable(tail(dbReadTable(disk, "Cash"), 10))
-  observeEvent(input$cash_confirm, {
-    bank_cash(input$cashinput, input$depositinput)
-    output$cashbalance = renderTable(tail(dbReadTable(disk, "Cash"), 10))
-    output$reportbuy = renderTable({
-      report_buy(input$dateinput, input$valueinput, cash_balance(), input$favorinput)
-    })
-    })
-  output$reportsell = renderTable(report_sell(input$dateinput))
+  output$reportsell = renderTable(report_sell(input$dateinput, df_portfolio()))
   observeEvent(input$multiorder_xls, {
-    buy = report_buy(input$dateinput, input$valueinput, cash_balance(), input$favorinput)
+    sum_cash = df_cash()
+    sum_cash = sum(sum_cash$value)
+    buy = report_buy(input$dateinput, input$valueinput, sum_cash, 
+                     input$favorinput, df_portfolio())
     sell = report_sell(input$dateinput)
     df = data.frame(Side=character(), `Stock Code`=character(),	NVDR=integer(),
                     Quantity=integer(),	Price=character(),
                     Validity=character(),	`Iceberg Vol`=integer())
     cnames = c("Side", "Stock Code", "NVDR", "Quantity", "Price",
-                     "Validity", "Iceberg Vol")
+               "Validity", "Iceberg Vol")
     colnames(df) = cnames
     if(dim(buy)[1]!=0) {
       df_buy = data.frame(buy$symbol)
@@ -167,6 +165,7 @@ server = function(input, output) {
       df_buy$Validity = NA
       df_buy$`Iceberg Vol` = NA
       colnames(df_buy) = cnames
+      df_buy = df_buy[order(df_buy$`Stock Code`), ]
       df = rbind(df, df_buy)
     }
     if(dim(sell)[1]!=0) {
@@ -179,16 +178,43 @@ server = function(input, output) {
       df_sell$Validity = NA
       df_sell$`Iceberg Vol` = NA
       colnames(df_sell) = cnames
+      df_sell = df_sell[order(df_sell$`Stock Code`), ]
       df = rbind(df, df_sell)
     }
     write.xlsx(df, "./Upload.xls", row.names = FALSE, showNA = FALSE)
   })
-  observeEvent(input$orderupdate, order_update(input$dateinput_order))
-  output$portfolio = renderTable({
-    report = trade_report(date_report()[1])
-    history = querydb(disk, "select symbol from Portfolio")[[1]]
-    report = report[report$symbol %in% history, ]
-    report
+  observeEvent(input$orderupdate, {
+    order_update(input$dateinput_order)
+    df_portfolio(reactive_portfolio())
+    df_cash(reactive_cash())})
+  #History Data
+  output$chartseries = renderPlot({
+    chartSeries(tail(getpricexts(input$symbolinput), 100), name=input$symbolinput)
   })
+  output$pricetable = renderTable({
+    table = tail(getpricexts(input$symbolinput), 10)
+    date = as.Date(index(table))
+    table = data.frame(table)
+    table$date = as.character(date)
+    table = table[c("date", "open", "high", "low", "close", "volume")]
+  })
+  output$tradetable = renderTable({
+    q = qselectwhere("*", symbol=input$symbolinput)
+    table = tail(get(disk, "Trade", q), 50)
+    table = as.data.frame(pivot_wider(table))
+    table = tail(table, 10)
+    table
+  })
+  #Cash Balance
+  output$cashbalance = renderTable({
+    tail(df_cash(), 10)})
+  observeEvent(input$cash_confirm, {
+    bank_cash(input$cashinput, input$depositinput)
+    df_cash(reactive_cash())})
+  #Portfolio
+  output$portfolio = renderTable({
+    df_portfolio()
+  })
+  
 }
         
