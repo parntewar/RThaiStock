@@ -118,7 +118,7 @@ update_favor = function(symbol) {
   return("Ok")
 }
 
-update_indicator = function(symbols, indi, ...) {
+update_indicator2 = function(symbols, indi, ...) {
   d = list(...)
   indi_name = deparse(substitute(indi))
   indi_args = paste0(names(d), "=", unname(unlist(d)))
@@ -136,7 +136,7 @@ update_indicator = function(symbols, indi, ...) {
     from_date = NULL
     if (have) {
       q = sprintf(
-        "select min(a.date), max(a.date) from (select date from Indicator where symbol = %s and name = %s order by date desc limit %i) as a", 
+        "select min(a.date), max(a.date) from (select date from Indicator where symbol = %s and name = %s order by date desc limit %i) as a",
         shQuote(sym), shQuote(indi_fullname), d$n)
       date = querydb(disk, q)
       from_date = date[, 1]
@@ -154,6 +154,42 @@ update_indicator = function(symbols, indi, ...) {
     colnames(indi_df) = c("value", "date", "symbol", "name")
     row.names(indi_df) = NULL
     if (have) indi_df = indi_df[which(!is.na(indi_df$value)),]
+    q = qinsertdf(indi_df, "Indicator")
+    set(disk, "Indicator", q)
+    tryCatch(progress$inc(inc), error=function(e) "error")
+  }
+  tryCatch(progress$close(), error=function(e) "error")
+  return(indi_fullname)
+}
+
+update_indicator = function(symbols, indi, ...) {
+  d = list(...)
+  indi_name = deparse(substitute(indi))
+  indi_args = paste0(names(d), "=", unname(unlist(d)))
+  indi_args = paste(indi_args, collapse = ", ")
+  indi_fullname = paste0(indi_name, "(", indi_args, ")")
+  inc = 1 / length(symbols)
+  tryCatch({
+    progress = Progress$new()
+    progress$set(0, sprintf("updating %s", indi_fullname))
+  }, error=function(e) "error")
+  foreach (sym = symbols) %do% {
+    q = qselectwhere("*", symbol=sym, name=indi_fullname)
+    indicator = get(disk, "Indicator", q)
+    have = dim(indicator)[1] != 0
+    if (have) {
+      q = qdeletewhere(symbol=sym, name=indi_fullname)
+      set(disk, "Indicator", q)
+    }
+    sym_xts = Cl(getpricexts(sym))
+    sym_xts = sym_xts[!is.na(sym_xts)]
+    indi_xts = indi(sym_xts, ...)
+    indi_df = data.frame(indi_xts)
+    indi_df$date = as.character(index(indi_xts))
+    indi_df$symbol = sym
+    indi_df$name = indi_fullname
+    colnames(indi_df) = c("value", "date", "symbol", "name")
+    row.names(indi_df) = NULL
     q = qinsertdf(indi_df, "Indicator")
     set(disk, "Indicator", q)
     tryCatch(progress$inc(inc), error=function(e) "error")

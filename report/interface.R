@@ -66,6 +66,8 @@ order_update = function(date=NULL) {
   Cash = data.frame(date=date, name=table$symbol, value=table$value)
   qdf_cash = qinsertdf(Cash, "Cash")
   set(disk, "Cash", qdf_cash)
+  #Rename file
+  file.rename("./Upload.xls", sprintf("./Upload-%s.xls", date))
 }
 
 ui = fluidPage(
@@ -189,7 +191,10 @@ server = function(input, output, session) {
     df_cash(reactive_cash())})
   #History Data
   output$chartseries = renderPlot({
-    chartSeries(tail(getpricexts(input$symbolinput), 100), name=input$symbolinput)
+    chartSeries(
+      tail(getpricexts(input$symbolinput), 100),
+      TA=c(addEMA(10, col="blue"), addEMA(21, col="red")),
+      name=input$symbolinput)
   })
   output$pricetable = renderTable({
     table = tail(getpricexts(input$symbolinput), 10)

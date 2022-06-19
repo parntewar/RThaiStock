@@ -33,6 +33,129 @@ run = function(symbols) {
   print("OK done")
 }
 
+vector_run = function(symbols) {
+  senddb(disk, "begin transaction")
+  split1000_index = function(length) {
+    start = seq(from=1, to=length, by=1000)
+    stop = c(start[-1] - 1, length)
+    list_seq = list(start=start, stop=stop)
+    return(list_seq)
+  strategy_name = "emacross"
+  #result = update_price(symbols)
+  # if(result!="Ok") print("Update Failed")
+  q = "select symbol, count(date) from Price group by symbol"
+  symbols = querydb(disk, q)
+  q = "select max(date) as date from Price"
+  max_date = querydb(disk, q)[1,1]
+  symbols = symbols[symbols$`count(date)` >= 30 & symbols$date == max_date,]$symbol
+  q = "select symbol, max(date) from Favor where symbol in (%s) group by symbol"
+  q = sprintf(q, paste0(shQuote(symbols), collapse = ", "))
+  today_quarter = floor_date(Sys.Date(), "quarter") - days(1)
+  favor_quarter = querydb(disk, q)
+  favor_quarter$date = floor_date(favor_quarter$`max(date)`, "quarter") - days(1)
+  favor_symbols = favor_quarter[favor_quarter$date != today_quarter, "symbol"]
+  if(length(favor_symbols)!=0) {
+    close_xts = lapply(favor_symbols, getpricexts, 
+                       as.character(today_quarter - years(1)))
+    close_xts = lapply(close_xts, Cl)
+    favor_list = mapply(genfavorTable, close_xts, favor_symbols, today_quarter, 
+                        SIMPLIFY = FALSE, USE.NAMES = FALSE)
+    favor_combind = do.call(rbind, favor_list)
+    }
+    split1000 = split1000_index(dim(favor_combind)[1])
+    for(i in length(split1000$start)) {
+      df = favor_combind[split1000$start[i]:split1000$stop[i], ]
+      q = qinsertdf(df, "Favor")
+      senddb(disk, q)
+    }
+  }
+  vector_update_indicator = function(symbols, indicator, ...) {
+    indicator_parameter = list(...)
+    indicator_name = deparse(substitute(indicator))
+    indicator_args = paste0(names(indicator_parameter), "=", 
+                            unname(unlist(indicator_parameter)))
+    indicator_args = paste(indicator_args, collapse = ", ")
+    indicator_fullname = paste0(indicator_name, "(", indicator_args, ")")
+    q = "delete from Indicator where symbol in (%s) and name = %s"
+    q = sprintf(q, paste0(shQuote(symbols), collapse = ", "), 
+                shQuote(indicator_fullname))
+    senddb(disk, q)
+    q = "select * from Price where symbol in (%s)"
+    q = sprintf(q, paste0(shQuote(symbols), collapse = ", "))
+    Price = querydb(disk, q)
+    Price_split = split(Price, Price$symbol)
+    Price_name = names(Price_split)
+    Price_xts_close = lapply(Price_split, function(x) {
+      xts = xts(x$close, as.Date(x$date))
+      colnames(xts) = "close"
+      return(xts)
+    })
+    Price_indicator = lapply(Price_xts_close, indicator, indicator_parameter$n)
+    Price_dataframe = mapply(function(x, n, s) {
+      dataframe = data.frame(date=index(x), value=coredata(x))
+      colnames(dataframe) = c("date", "value")
+      dataframe$name = n
+      dataframe$symbol = s
+      return(dataframe)
+    }, Price_indicator, indicator_fullname, Price_name, SIMPLIFY = FALSE, 
+    USE.NAMES = FALSE)
+    Price_combind = do.call(rbind, Price_dataframe)
+    split1000 = split1000_index(dim(Price_combind)[1])
+    for(i in length(split1000$start)) {
+      df = Price_combind[split1000$start[i]:split1000$stop[i], ]
+      q = qinsertdf(df, "Indicator")
+      senddb(disk, q)
+    }
+    return(indicator_fullname)
+  }
+  ema10 = vector_update_indicator(symbols, EMA, n=10)
+  ema21 = vector_update_indicator(symbols, EMA, n=21)
+  q = "select max(date) as date from Sig"
+  sig_max_date = querydb(disk, q)[1,1]
+  q = "delete from Sig where symbol in (%s) and date = (%s) and strategy = (%s)"
+  q = sprintf(q, paste0(shQuote(symbols), collapse = ", "), shQuote(sig_max_date), 
+              shQuote(strategy_name))
+  senddb(disk, q)
+  q = "select * from Indicator where symbol in (%s) and name in (%s) and date >= %s"
+  q = sprintf(q, 
+              paste0(shQuote(symbols), collapse = ", "), 
+              paste0(shQuote(c(ema10, ema21)), collapse = ", "),
+              shQuote(sig_max_date))
+  ema = querydb(disk, q)
+  ema_split = split(ema, ema$symbol)
+  ema_split = lapply(ema_split, function(x) split(x, x$name))
+  sig_list = lapply(ema_split, 
+                    function(x) ifelse(x[[ema10]]$value > x[[ema21]]$value, 1, 0))
+  sig_dataframe = mapply(function(date, symbol, value) {
+    dataframe = data.frame(date=date, symbol=symbol, value=value)
+    dataframe$name = "Enter"
+    dataframe$strategy = strategy_name
+    return(dataframe)
+  },
+  lapply(ema_split, function(x) x[[1]]$date), names(sig_list), sig_list,
+  SIMPLIFY = FALSE, USE.NAMES = FALSE)
+  sig_combind = do.call(rbind, sig_dataframe)
+  split1000 = split1000_index(dim(sig_combind)[1])
+  for(i in length(split1000$start)) {
+    df = sig_combind[split1000$start[i]:split1000$stop[i], ]
+    q = qinsertdf(df, "Sig")
+    senddb(disk, q)
+  }
+  q = "select max(date) as date from Trade"
+  trade_max_date = querydb(disk, q)[1,1]
+  q = paste0("select distinct date from Trade ",
+             "order by date desc limit 2")
+  trade_buffer_date = querydb(disk, q)[2,1]
+  q = sprintf("delete from Trade where symbol in (%s) and date = %s", 
+              paste0(shQuote(symbols), collapse = ", "),
+              shQuote(trade_max_date))
+  senddb(disk, q)
+  q = sprintf("select * from Trade where symbol in (%s) and date = %s", 
+              paste0(shQuote(symbols), collapse = ", "),
+              shQuote(trade_buffer_date))
+  trade_buffer = querydb(disk, q)
+}
+
 update_trade = function(symbol, strategy) {
   qmaxdate = qselectwhere("max(date)", symbol=symbol, strategy=strategy)
   maxdate = get(disk, "Trade", qmaxdate)[1,1]

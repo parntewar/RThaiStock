@@ -5,3 +5,5 @@
 /database/db_file/stock-database.db
 /dfx
 /test/
+Upload*.xls
+/report/test.R
